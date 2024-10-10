@@ -29,6 +29,7 @@ setuptools.setup(
     python_requires='>=3.12',
     packages=[
         package_name,
+        f'{package_name}.dependencies',
         f'{package_name}.enums',
         f'{package_name}.exceptions',
         f'{package_name}.functions',

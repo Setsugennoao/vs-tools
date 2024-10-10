@@ -8,7 +8,8 @@ import vapoursynth as vs
 from stgpytools import CustomError, F, FuncExceptT
 
 from ..exceptions import (
-    FormatsRefClipMismatchError, ResolutionsRefClipMismatchError, VariableFormatError, VariableResolutionError
+    DependencyRegistryError, FormatsRefClipMismatchError, PluginNotFoundError, PackageNotFoundError,
+    ResolutionsRefClipMismatchError, VariableFormatError, VariableResolutionError,
 )
 from ..types import ConstantFormatVideoNode
 
@@ -19,7 +20,8 @@ __all__ = [
     'check_variable_format',
     'check_variable_resolution',
     'check_variable',
-    'check_correct_subsampling'
+    'check_correct_subsampling',
+    'check_dependencies',
 ]
 
 
@@ -192,6 +194,7 @@ def check_correct_subsampling(
 
     :raises InvalidSubsamplingError:    The clip has invalid subsampling.
     """
+
     from ..exceptions import InvalidSubsamplingError
 
     if clip.format:
@@ -204,3 +207,46 @@ def check_correct_subsampling(
                 'The {subsampling} subsampling is not supported for this resolution!',
                 reason=dict(width=width, height=height)
             )
+
+
+def check_dependencies(
+    parent_package: str | None = None, func: FuncExceptT | None = None, **kwargs: Any
+) -> bool:
+    """
+    Check for both plugin and package dependencies.
+
+    :param parent_package:              The name of the parent package. If None, automatically determine.
+    :param func:                        Function returned for custom error handling.
+                                        This should only be set by VS package developers.
+    :param kwargs:                      Additional keyword arguments to pass on to the `check` methods.
+
+    :raises PluginNotFoundError:        If a required plugin is not found.
+    :raises PackageNotFoundError:       If a required package is not found.
+    """
+
+    func = func or check_dependencies
+
+    if parent_package is None:
+        from ..utils.package import get_calling_package
+
+        parent_package = get_calling_package(2)
+
+    errors = list[DependencyRegistryError]()
+
+    try:
+        PluginNotFoundError.check(func, None, None, parent_package, **kwargs)
+    except PluginNotFoundError as e:
+        errors.append(e)
+
+    try:
+        PackageNotFoundError.check(func, None, None, parent_package, **kwargs)
+    except PackageNotFoundError as e:
+        errors.append(e)
+
+    if errors:
+        if len(errors) == 1:
+            raise errors[0]
+
+        raise DependencyRegistryError(func, '\n'.join(str(e) for e in errors))
+
+    return True
